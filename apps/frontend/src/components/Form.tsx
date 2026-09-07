@@ -35,14 +35,15 @@ export default function Form({ onStart }: { onStart?: (sessionId: number) => voi
             console.log(resumeRes.data);
             const candidateId = resumeRes.data.candidateId;
 
-            await axios.post(`${BACKEND_URL}/api/v1/onboarding/socials`, {
+            const socialsRes = await axios.post(`${BACKEND_URL}/api/v1/onboarding/socials`, {
                 github,
                 linkedIn,
                 candidateId
             })
+            const activeCandidateId = socialsRes.data.candidateId ?? candidateId;
 
             const sessionRes = await axios.post(`${BACKEND_URL}/api/v1/onboarding/session`, {
-                candidateId,
+                candidateId: activeCandidateId,
                 role,
                 difficulty
             })

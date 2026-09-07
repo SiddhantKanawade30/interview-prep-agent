@@ -26,8 +26,8 @@ export const candidates = pgTable("candidates", {
 
 export const socials = pgTable("socials", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    github: varchar().unique().notNull(),
-    linkedIn: varchar().unique().notNull(),
+    github: varchar().notNull(),
+    linkedIn: varchar().notNull(),
     candidateId: integer("candidate_id")
         .notNull()
         .unique()

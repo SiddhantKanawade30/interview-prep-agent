@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import axios from "axios";
 import { BACKEND_URL } from "../lib/config";
 import { Button } from "./ui/button";
 import { toast } from "sonner";
@@ -13,7 +12,11 @@ import {
   Sparkles, 
   RefreshCw,
   AlertCircle,
-  MessageSquareCode
+  MessageSquareCode,
+  Target,
+  BrainCircuit,
+  MessagesSquare,
+  Layers3
 } from "lucide-react";
 
 interface Message {
@@ -31,6 +34,15 @@ interface QuestionFeedback {
 
 interface EvaluationReport {
   score: number;
+  rating?: "Excellent" | "Strong" | "Developing" | "Needs Improvement";
+  categoryScores?: {
+    technicalAccuracy: number;
+    problemSolving: number;
+    communication: number;
+    depth: number;
+  };
+  answeredCount?: number;
+  totalQuestions?: number;
   strengths: string[];
   improvements: string[];
   detailedFeedback?: string;
@@ -48,69 +60,100 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
   const [evaluation, setEvaluation] = useState<EvaluationReport | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const hasInitializedRef = useRef<boolean>(false);
+  const socketRef = useRef<WebSocket | null>(null);
+  const socketCleanupTimerRef = useRef<number | null>(null);
+  const intentionalCloseRef = useRef(false);
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isFinished]);
 
-  const fetchNextQuestion = async () => {
-    setIsLoading(true);
-    try {
-      const res = await axios.post(`${BACKEND_URL}/api/v1/onboarding/question`, {
-        sessionId,
-      });
-
-      if (res.data.isCompleted) {
-        setIsFinished(true);
-        if (res.data.evaluation) {
-          setEvaluation(res.data.evaluation);
-        }
-        return;
-      }
-
-      const questionData = res.data.question;
-      if (questionData) {
-        setCurrentQuestionId(questionData.id);
-        const qNum = questionData.questionNumber || res.data.questionNumber || 1;
-        setQuestionNumber(qNum);
-
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === questionData.id.toString())) {
-            return prev;
-          }
-          return [
-            ...prev,
-            {
-              id: questionData.id.toString(),
-              role: "system",
-              content: questionData.question,
-            },
-          ];
-        });
-      }
-    } catch (err: any) {
-      console.error(err);
-      if (err.response?.data?.isCompleted) {
-        setIsFinished(true);
-        if (err.response.data.evaluation) {
-          setEvaluation(err.response.data.evaluation);
-        }
-      } else {
-        toast.error(err.response?.data?.message || "Failed to fetch next question");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    if (sessionId && !hasInitializedRef.current) {
-      hasInitializedRef.current = true;
-      fetchNextQuestion();
+    if (sessionId) {
+      if (socketCleanupTimerRef.current !== null) {
+        window.clearTimeout(socketCleanupTimerRef.current);
+        socketCleanupTimerRef.current = null;
+      }
+
+      if (socketRef.current) {
+        return () => {
+          socketCleanupTimerRef.current = window.setTimeout(() => {
+            socketRef.current?.close();
+            socketRef.current = null;
+            socketCleanupTimerRef.current = null;
+          }, 0);
+        };
+      }
+
+      setIsLoading(true);
+      const socketUrl = `${BACKEND_URL.replace(/^http/, "ws")}/ws/interview`;
+      const socket = new WebSocket(socketUrl);
+      socketRef.current = socket;
+
+      socket.onopen = () => {
+        socket.send(JSON.stringify({ type: "start", sessionId }));
+      };
+
+      socket.onmessage = (event) => {
+        const message = JSON.parse(event.data) as {
+          type: "question" | "completed" | "error";
+          question?: { id: number; question: string; questionNumber: number };
+          questionNumber?: number;
+          evaluation?: EvaluationReport;
+          message?: string;
+        };
+
+        if (message.type === "question" && message.question) {
+          setCurrentQuestionId(message.question.id);
+          setQuestionNumber(message.question.questionNumber || message.questionNumber || 1);
+          setMessages((previousMessages) => {
+            if (previousMessages.some((item) => item.id === message.question!.id.toString())) {
+              return previousMessages;
+            }
+            return [...previousMessages, {
+              id: message.question!.id.toString(),
+              role: "system",
+              content: message.question!.question,
+            }];
+          });
+          setIsLoading(false);
+        } else if (message.type === "completed") {
+          setIsFinished(true);
+          setEvaluation(message.evaluation ?? null);
+          setIsLoading(false);
+          intentionalCloseRef.current = true;
+          socket.close();
+        } else if (message.type === "error") {
+          toast.error(message.message || "Interview connection failed");
+          setIsLoading(false);
+        }
+      };
+
+      socket.onerror = () => {
+        toast.error("Interview connection failed");
+        setIsLoading(false);
+      };
+
+      socket.onclose = () => {
+        if (socketRef.current === socket) {
+          socketRef.current = null;
+        }
+        if (!intentionalCloseRef.current && !isFinished) {
+          toast.error("Interview connection closed unexpectedly");
+        }
+      };
+
+      return () => {
+        socketCleanupTimerRef.current = window.setTimeout(() => {
+          if (socketRef.current === socket) {
+            socket.close();
+            socketRef.current = null;
+          }
+          socketCleanupTimerRef.current = null;
+        }, 0);
+      };
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   const handleSend = async () => {
@@ -129,21 +172,18 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
       },
     ]);
 
-    setIsLoading(true);
-    try {
-      await axios.post(`${BACKEND_URL}/api/v1/onboarding/answer`, {
-        questionId: currentQuestionId,
-        answer: answerText,
-      });
-      
-      setCurrentQuestionId(null);
-      // Fetch next question after submitting answer
-      await fetchNextQuestion();
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to submit answer");
-      setIsLoading(false);
+    if (socketRef.current?.readyState !== WebSocket.OPEN) {
+      toast.error("Interview connection is not ready");
+      return;
     }
+
+    setCurrentQuestionId(null);
+    setIsLoading(true);
+    socketRef.current.send(JSON.stringify({
+      type: "answer",
+      questionId: currentQuestionId,
+      answer: answerText,
+    }));
   };
 
   return (
@@ -233,12 +273,48 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
                     <p className="text-xs text-muted-foreground">Comprehensive performance & mistake assessment</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 self-start sm:self-auto bg-background px-4 py-2 rounded-xl border shadow-sm">
-                  <span className="text-xs font-medium text-muted-foreground">Overall Score:</span>
-                  <span className="text-2xl font-extrabold bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
-                    {evaluation?.score ?? 85}/100
-                  </span>
+                <div className="flex items-center gap-4 self-start sm:self-auto bg-background px-4 py-3 rounded-xl border shadow-sm">
+                  <div className="text-right">
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Overall score</p>
+                    <p className="text-2xl font-extrabold text-emerald-600">{evaluation?.score ?? 0}<span className="text-sm font-semibold text-muted-foreground">/100</span></p>
+                  </div>
+                  <div className="h-10 w-px bg-border" />
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Rating</p>
+                    <p className="text-sm font-bold text-primary">{evaluation?.rating ?? "Developing"}</p>
+                  </div>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { label: "Technical accuracy", value: evaluation?.categoryScores?.technicalAccuracy ?? evaluation?.score ?? 0, icon: Target, color: "text-blue-600", bar: "bg-blue-500" },
+                  { label: "Problem solving", value: evaluation?.categoryScores?.problemSolving ?? evaluation?.score ?? 0, icon: BrainCircuit, color: "text-violet-600", bar: "bg-violet-500" },
+                  { label: "Communication", value: evaluation?.categoryScores?.communication ?? evaluation?.score ?? 0, icon: MessagesSquare, color: "text-emerald-600", bar: "bg-emerald-500" },
+                  { label: "Depth", value: evaluation?.categoryScores?.depth ?? evaluation?.score ?? 0, icon: Layers3, color: "text-amber-600", bar: "bg-amber-500" },
+                ].map((category) => {
+                  const Icon = category.icon;
+                  return (
+                    <div key={category.label} className="rounded-xl border bg-background p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`flex items-center gap-1.5 text-[11px] font-semibold ${category.color}`}>
+                          <Icon className="w-3.5 h-3.5" />
+                          {category.label}
+                        </span>
+                        <span className="text-xs font-bold text-foreground">{category.value}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className={`h-full rounded-full ${category.bar}`} style={{ width: `${Math.min(100, Math.max(0, category.value))}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                <span><strong className="text-foreground">{evaluation?.answeredCount ?? messages.filter((message) => message.role === "user").length}</strong> answers submitted</span>
+                <span><strong className="text-foreground">{evaluation?.totalQuestions ?? 5}</strong> questions assessed</span>
+                <span>Rating is based on accuracy, reasoning, communication, and depth</span>
               </div>
 
               {/* Strengths & Improvements */}

@@ -13,6 +13,15 @@ export interface QuestionFeedback {
 
 export interface EvaluationResult {
     score: number;
+    rating: "Excellent" | "Strong" | "Developing" | "Needs Improvement";
+    categoryScores: {
+        technicalAccuracy: number;
+        problemSolving: number;
+        communication: number;
+        depth: number;
+    };
+    answeredCount: number;
+    totalQuestions: number;
     strengths: string[];
     improvements: string[];
     detailedFeedback: string;
@@ -39,14 +48,25 @@ ${JSON.stringify(previousQuestions, null, 2)}
 
 Instructions:
 1. Calculate an overall score from 0 to 100 based on technical accuracy, depth, and clarity.
-2. List 3 key strengths.
-3. List 3 areas for improvement (pointing out specific mistakes or weaknesses).
-4. Provide an in-depth constructive critique ("detailedFeedback") explaining where the candidate struggled, what errors they made, and how to improve.
-5. Provide a question-by-question breakdown ("questionBreakdown") evaluating each question and candidate response pair.
+2. Assign a rating: "Excellent" for 85-100, "Strong" for 70-84, "Developing" for 50-69, or "Needs Improvement" for 0-49.
+3. Score technicalAccuracy, problemSolving, communication, and depth independently from 0 to 100.
+4. List 3 specific key strengths.
+5. List 3 specific areas for improvement, pointing out mistakes or missing concepts from the answers.
+6. Provide an in-depth constructive critique ("detailedFeedback") explaining where the candidate struggled, what errors they made, and how to improve.
+7. Provide a question-by-question breakdown ("questionBreakdown") evaluating every question and candidate response pair.
 
 Return ONLY a valid JSON object matching this exact format:
 {
   "score": 85,
+    "rating": "Strong",
+    "categoryScores": {
+        "technicalAccuracy": 88,
+        "problemSolving": 82,
+        "communication": 85,
+        "depth": 80
+    },
+    "answeredCount": 5,
+    "totalQuestions": 5,
   "strengths": [
     "Key strength 1",
     "Key strength 2",
@@ -76,8 +96,18 @@ Return ONLY a valid JSON object matching this exact format:
             "You are an expert AI technical interviewer and evaluator. Output valid JSON only."
         );
 
+        const score = clampScore(parsed.score);
         return {
-            score: typeof parsed.score === "number" ? parsed.score : 85,
+            score,
+            rating: getRating(score),
+            categoryScores: {
+                technicalAccuracy: normalizeCategoryScore(parsed.categoryScores?.technicalAccuracy, score),
+                problemSolving: normalizeCategoryScore(parsed.categoryScores?.problemSolving, score),
+                communication: normalizeCategoryScore(parsed.categoryScores?.communication, score),
+                depth: normalizeCategoryScore(parsed.categoryScores?.depth, score),
+            },
+            answeredCount: previousQuestions.filter(q => q.userResponse?.trim()).length,
+            totalQuestions: previousQuestions.length,
             strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
             improvements: Array.isArray(parsed.improvements) ? parsed.improvements : [],
             detailedFeedback: typeof parsed.detailedFeedback === "string" ? parsed.detailedFeedback : "Identify key technical trade-offs and edge cases in future answers.",
@@ -95,10 +125,19 @@ function calculateFallbackEvaluation(
 ): EvaluationResult {
     const answeredCount = previousQuestions.filter(q => q.userResponse && q.userResponse.trim().length > 0).length;
     const total = previousQuestions.length || 1;
-    const fallbackScore = Math.min(100, Math.max(50, Math.round((answeredCount / total) * 85)));
+    const fallbackScore = Math.min(100, Math.max(0, Math.round((answeredCount / total) * 85)));
 
     return {
         score: fallbackScore,
+        rating: getRating(fallbackScore),
+        categoryScores: {
+            technicalAccuracy: fallbackScore,
+            problemSolving: fallbackScore,
+            communication: fallbackScore,
+            depth: fallbackScore,
+        },
+        answeredCount,
+        totalQuestions: previousQuestions.length,
         strengths: [
             "Demonstrated active participation throughout the technical interview.",
             "Structured response approach across the questions."
@@ -118,4 +157,23 @@ function calculateFallbackEvaluation(
         })),
         summary: `The candidate completed ${answeredCount} out of ${total} questions during the session.`
     };
+}
+
+function clampScore(value: unknown): number {
+    return typeof value === "number" && Number.isFinite(value)
+        ? Math.min(100, Math.max(0, Math.round(value)))
+        : 0;
+}
+
+function normalizeCategoryScore(value: unknown, fallback: number): number {
+    return typeof value === "number" && Number.isFinite(value)
+        ? clampScore(value)
+        : fallback;
+}
+
+function getRating(score: number): EvaluationResult["rating"] {
+    if (score >= 85) return "Excellent";
+    if (score >= 70) return "Strong";
+    if (score >= 50) return "Developing";
+    return "Needs Improvement";
 }
