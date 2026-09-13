@@ -46,36 +46,7 @@ WS   /ws/interview
 
 The standalone question and answer HTTP routes remain registered, but the active frontend interview uses the WebSocket flow.
 
-## Environment
 
-Create `apps/backend/.env`:
-
-```env
-DATABASE_URL=postgresql://...
-OPENROUTER_API_KEY=...
-DEEPGRAM_API_KEY=...
-ELEVENLABS_API_KEY=...
-```
-
-The frontend currently uses `http://localhost:8000` as the backend URL. For production, use a Deepgram key that can create temporary browser tokens instead of exposing a project key to the browser.
-
-## Run Locally
-
-```powershell
-bun install
-
-cd apps/backend
-bun run dev
-```
-
-In a second terminal:
-
-```powershell
-cd apps/frontend
-bun run dev
-```
-
-From the repository root:
 
 ```powershell
 bun run build
