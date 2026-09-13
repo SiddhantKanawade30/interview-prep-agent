@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@deepgram/sdk": "^5.9.0",
+    "@elevenlabs/elevenlabs-js": "^2.68.0",
     "@openrouter/sdk": "^1.2.48",
     "@types/express": "^5.0.6",
     "cors": "^2.8.6",

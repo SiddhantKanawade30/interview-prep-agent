@@ -15,12 +15,12 @@ export function App() {
   };
 
   return (
-    <div>
+    <>
       {page == "form" && <Form onStart={handleStart} />}
       {page == "interview" && sessionId && <InterviewPage sessionId={sessionId} />}
       {page == "result" && <Result />}
       <Toaster />
-    </div>
+    </>
   );
 }
 

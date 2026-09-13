@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 
 import onboardingRouter from "./http/routes/onboarding.routes";
+import sttTokenRouter from "./http/routes/stt-token.routes";
 import { handleInterviewSocket } from "./ws/interview";
 
 const app = express();
@@ -12,6 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 app.use("/api/v1/onboarding", onboardingRouter);
+app.use("/api/v1/interview", sttTokenRouter);
 
 const server = createServer(app);
 const webSocketServer = new WebSocketServer({ noServer: true });

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { WebSocket } from "ws";
 import { getNextInterviewQuestion, submitInterviewAnswer } from "../services/interview-chat.service";
+import { textToSpeech } from "../services/tts.service";
 
 const interviewMessageSchema = z.discriminatedUnion("type", [
     z.object({ type: z.literal("start"), sessionId: z.number().int().positive() }),
@@ -48,11 +49,12 @@ export function handleInterviewSocket(socket: WebSocket) {
                         await submitInterviewAnswer(message.data.questionId, message.data.answer);
                     }
 
-                    const result = await getNextInterviewQuestion(
+                    const sessionId =
                         message.data.type === "start"
                             ? message.data.sessionId
-                            : await getSessionIdForQuestion(message.data.questionId),
-                    );
+                            : await getSessionIdForQuestion(message.data.questionId);
+
+                    const result = await getNextInterviewQuestion(sessionId);
 
                     if (result.isCompleted) {
                         send(
@@ -61,10 +63,21 @@ export function handleInterviewSocket(socket: WebSocket) {
                             () => socket.close(1000, "Interview completed"),
                         );
                     } else {
+                        // Generate TTS audio in parallel with building the response payload
+                        let audioBase64: string | null = null;
+                        try {
+                            const audioBuffer = await textToSpeech(result.question.question);
+                            audioBase64 = audioBuffer.toString("base64");
+                        } catch (ttsError) {
+                            // TTS failure is non-fatal — interview continues without audio
+                            console.error("TTS error (non-fatal):", ttsError);
+                        }
+
                         send(socket, {
                             type: "question",
                             question: result.question,
                             questionNumber: result.questionNumber,
+                            audioBase64,
                         });
                     }
                 } catch (error) {
