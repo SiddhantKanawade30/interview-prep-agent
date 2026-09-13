@@ -1,5 +1,5 @@
 import { useState } from "react";
-import "../styles/globals.css";
+import "./index.css";
 import Form from "./components/Form";
 import Result from "./components/Result";
 import InterviewPage from "./components/Interview";

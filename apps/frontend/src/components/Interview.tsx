@@ -2,8 +2,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { BACKEND_URL } from "../lib/config";
 import { toast } from "sonner";
 import {
-  Mic,
-  MicOff,
   Trophy,
   CheckCircle2,
   AlertTriangle,
@@ -50,10 +48,13 @@ interface EvaluationReport {
 type InterviewPhase =
   | "connecting"      // setting up WS + fetching Deepgram key
   | "ai-speaking"     // AI audio is playing
-  | "user-listening"  // waiting for user to press mic
-  | "user-speaking"   // mic active, streaming to Deepgram
+  | "user-listening"  // microphone is ready for the candidate
+  | "user-speaking"   // candidate speech is streaming to Deepgram
   | "processing"      // answer sent, waiting for next question
   | "completed";      // interview done
+
+const SILENCE_TIMEOUT_MS = 4000;
+const MIN_ANSWER_CHARS = 2;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -94,8 +95,10 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
   const animFrameRef = useRef<number>(0);
   const currentQuestionIdRef = useRef<number | null>(null);
   const intentionalCloseRef = useRef(false);
-  const deepgramKeyRef = useRef<string>("");
   const finalTranscriptRef = useRef(""); // keep in sync for callbacks
+  const userTranscriptRef = useRef("");
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isSubmittingAnswerRef = useRef(false);
 
   // ── Audio context (lazy) ──
   function getAudioContext(): AudioContext {
@@ -152,11 +155,13 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
         source.onended = () => {
           stopAmplitudeLoop();
           setPhase("user-listening");
+          startDeepgram().catch((error: Error) => toast.error(error.message));
         };
       } catch (e) {
         console.error("Audio playback error:", e);
         stopAmplitudeLoop();
         setPhase("user-listening");
+        startDeepgram().catch((error: Error) => toast.error(error.message));
       }
     },
     [startAmplitudeLoop, stopAmplitudeLoop]
@@ -164,14 +169,22 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
 
   // ── Deepgram STT ──
   const startDeepgram = useCallback(async () => {
-    if (!deepgramKeyRef.current) return;
+    if (deepgramRef.current || mediaRecorderRef.current) return;
+
+    const tokenResponse = await fetch(`${BACKEND_URL}/api/v1/interview/stt-token`);
+    if (!tokenResponse.ok) {
+      const errorData = (await tokenResponse.json().catch(() => ({}))) as { error?: string };
+      throw new Error(errorData.error ?? "Could not get speech recognition token");
+    }
+    const tokenData = (await tokenResponse.json()) as { token?: string };
+    if (!tokenData.token) throw new Error("Speech recognition token is missing");
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaStreamRef.current = stream;
 
     const dgSocket = new WebSocket(
-      `wss://api.deepgram.com/v1/listen?model=nova-3&language=en&interim_results=true&punctuate=true`,
-      ["token", deepgramKeyRef.current]
+      `wss://api.deepgram.com/v1/listen?model=nova-3&language=en&interim_results=true&punctuate=true&endpointing=${SILENCE_TIMEOUT_MS}&utterance_end_ms=${SILENCE_TIMEOUT_MS}&vad_events=true`,
+      ["token", tokenData.token]
     );
     deepgramRef.current = dgSocket;
 
@@ -196,46 +209,81 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
         const data = JSON.parse(event.data as string) as {
           type: string;
           is_final: boolean;
+          speech_final?: boolean;
           channel?: { alternatives?: { transcript: string }[] };
         };
         if (data.type === "Results") {
           const transcript = data.channel?.alternatives?.[0]?.transcript ?? "";
-          if (data.is_final) {
+          if (transcript.trim()) {
+            setPhase("user-speaking");
+            scheduleSilenceSubmit();
+          }
+          if (data.is_final && transcript.trim()) {
             finalTranscriptRef.current = (finalTranscriptRef.current + " " + transcript).trim();
             setFinalTranscript(finalTranscriptRef.current);
+            userTranscriptRef.current = "";
             setUserTranscript("");
-          } else {
+          } else if (transcript.trim()) {
+            userTranscriptRef.current = transcript;
             setUserTranscript(transcript);
           }
+        } else if (data.type === "UtteranceEnd") {
+          scheduleSilenceSubmit();
         }
       } catch {}
     };
 
-    dgSocket.onerror = () => toast.error("Speech recognition error");
+    dgSocket.onerror = () => toast.error("Speech recognition connection failed");
+    dgSocket.onclose = () => {
+      deepgramRef.current = null;
+      mediaRecorderRef.current = null;
+    };
   }, []);
 
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    silenceTimerRef.current = null;
+  }, []);
+
+  const scheduleSilenceSubmit = useCallback(() => {
+    clearSilenceTimer();
+    silenceTimerRef.current = setTimeout(() => {
+      sendAnswer();
+    }, SILENCE_TIMEOUT_MS);
+  }, [clearSilenceTimer]);
+
   const stopDeepgram = useCallback(() => {
+    clearSilenceTimer();
     mediaRecorderRef.current?.stop();
     mediaRecorderRef.current = null;
     deepgramRef.current?.close();
     deepgramRef.current = null;
     mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
     mediaStreamRef.current = null;
-  }, []);
+  }, [clearSilenceTimer]);
 
   // ── Send answer ──
   const sendAnswer = useCallback(() => {
-    const answer = finalTranscriptRef.current.trim();
-    if (!answer || !currentQuestionIdRef.current) return;
+    if (isSubmittingAnswerRef.current) return;
+    const answer = (finalTranscriptRef.current || userTranscriptRef.current).trim();
+
+    // Always stop the microphone first, even if transcription is still interim.
+    stopDeepgram();
+
+    if (answer.length < MIN_ANSWER_CHARS || !currentQuestionIdRef.current) {
+      setPhase("user-listening");
+      return;
+    }
     if (socketRef.current?.readyState !== WebSocket.OPEN) {
       toast.error("Connection lost");
       return;
     }
 
-    stopDeepgram();
+    isSubmittingAnswerRef.current = true;
     setUserTranscript("");
     setFinalTranscript("");
     finalTranscriptRef.current = "";
+    userTranscriptRef.current = "";
     setPhase("processing");
     setAiText("");
 
@@ -247,32 +295,8 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
       })
     );
     currentQuestionIdRef.current = null;
+    isSubmittingAnswerRef.current = false;
   }, [stopDeepgram]);
-
-  // ── Mic toggle ──
-  const handleMicToggle = useCallback(() => {
-    if (phase === "user-listening") {
-      // Start recording
-      finalTranscriptRef.current = "";
-      setFinalTranscript("");
-      setUserTranscript("");
-      setPhase("user-speaking");
-      startDeepgram().catch(() => toast.error("Could not access microphone"));
-    } else if (phase === "user-speaking") {
-      // Finished — stop and send
-      sendAnswer();
-    }
-  }, [phase, startDeepgram, sendAnswer]);
-
-  // ── Fetch Deepgram key ──
-  useEffect(() => {
-    fetch(`${BACKEND_URL}/api/v1/interview/stt-token`)
-      .then((r) => r.json())
-      .then((data: { key?: string }) => {
-        if (data.key) deepgramKeyRef.current = data.key;
-      })
-      .catch(() => console.warn("Could not fetch STT token — speech input disabled"));
-  }, []);
 
   // ── Interview WebSocket ──
   useEffect(() => {
@@ -297,6 +321,7 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
       };
 
       if (message.type === "question" && message.question) {
+        isSubmittingAnswerRef.current = false;
         currentQuestionIdRef.current = message.question.id;
         setQuestionNumber(message.question.questionNumber ?? message.questionNumber ?? 1);
         setAiText(message.question.question);
@@ -307,6 +332,10 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
         } else {
           // No audio — skip straight to listening
           setPhase("user-listening");
+          startDeepgram().catch(() => {
+            setPhase("user-listening");
+            toast.error("Could not access microphone");
+          });
         }
       } else if (message.type === "completed") {
         setIsFinished(true);
@@ -361,14 +390,11 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
   const phaseLabel = {
     connecting: "Connecting…",
     "ai-speaking": "AI Interviewer is speaking",
-    "user-listening": "Your turn — press mic to answer",
-    "user-speaking": "Listening… press mic to finish",
+    "user-listening": "Listening for your answer…",
+    "user-speaking": "Listening… pause for 4 seconds to submit",
     processing: "Processing your answer…",
     completed: "Interview complete",
   }[phase];
-
-  const micActive = phase === "user-speaking";
-  const micEnabled = phase === "user-listening" || phase === "user-speaking";
 
   return (
     <div className="voice-room">
@@ -452,20 +478,6 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
       {/* Bottom controls */}
       <footer className="voice-footer">
         <p className="phase-label">{phaseLabel}</p>
-        <button
-          id="mic-btn"
-          className={`mic-btn ${micActive ? "mic-active" : ""} ${!micEnabled ? "mic-disabled" : ""}`}
-          onClick={handleMicToggle}
-          disabled={!micEnabled}
-          title={micActive ? "Stop recording" : "Start speaking"}
-        >
-          {micActive ? <MicOff className="mic-icon" /> : <Mic className="mic-icon" />}
-        </button>
-        {phase === "user-speaking" && (finalTranscript || userTranscript) && (
-          <button className="send-btn" onClick={sendAnswer}>
-            Send Answer
-          </button>
-        )}
       </footer>
     </div>
   );

@@ -1,5 +1,5 @@
-@import "../styles/globals.css";
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
+@import "../styles/globals.css";
 
 /* ── Reset / Base ─────────────────────────────────────────────────────── */
 @layer base {
@@ -25,6 +25,9 @@
 .voice-room {
   position: fixed;
   inset: 0;
+  width: 100%;
+  height: 100vh;
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -166,8 +169,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 260px;
-  height: 260px;
+  width: 230px;
+  height: 230px;
 }
 
 .avatar-ring {
@@ -176,9 +179,9 @@
   border: 2px solid hsl(250 80% 70% / 0.25);
   transition: transform 0.06s linear, opacity 0.3s;
 }
-.ring-1 { width: 160px; height: 160px; }
-.ring-2 { width: 200px; height: 200px; }
-.ring-3 { width: 245px; height: 245px; }
+.ring-1 { width: 140px; height: 140px; }
+.ring-2 { width: 180px; height: 180px; }
+.ring-3 { width: 215px; height: 215px; }
 
 .ring-active {
   border-color: hsl(250 80% 70% / 0.5);
@@ -194,8 +197,8 @@
 
 .avatar-core {
   position: relative;
-  width: 120px;
-  height: 120px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -215,8 +218,8 @@
 }
 
 .avatar-icon {
-  width: 54px;
-  height: 54px;
+  width: 40px;
+  height: 40px;
   color: white;
 }
 
@@ -297,73 +300,6 @@
   color: hsl(240 10% 50%);
   margin: 0;
   letter-spacing: 0.02em;
-}
-
-.mic-btn {
-  position: relative;
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: hsl(250 80% 55%);
-  box-shadow:
-    0 0 0 6px hsl(250 80% 55% / 0.15),
-    0 8px 32px hsl(250 80% 50% / 0.4);
-  transition: transform 0.15s, box-shadow 0.15s, background 0.2s;
-}
-.mic-btn:hover:not(.mic-disabled) {
-  transform: scale(1.08);
-  box-shadow:
-    0 0 0 8px hsl(250 80% 55% / 0.2),
-    0 12px 40px hsl(250 80% 50% / 0.5);
-}
-.mic-btn:active:not(.mic-disabled) {
-  transform: scale(0.95);
-}
-
-.mic-active {
-  background: hsl(343 80% 52%);
-  box-shadow:
-    0 0 0 6px hsl(343 80% 52% / 0.2),
-    0 8px 32px hsl(343 80% 50% / 0.45);
-  animation: mic-pulse 1.2s ease-in-out infinite;
-}
-@keyframes mic-pulse {
-  0%, 100% { box-shadow: 0 0 0 6px hsl(343 80% 52% / 0.2), 0 8px 32px hsl(343 80% 50% / 0.45); }
-  50% { box-shadow: 0 0 0 14px hsl(343 80% 52% / 0.08), 0 8px 32px hsl(343 80% 50% / 0.45); }
-}
-
-.mic-disabled {
-  background: hsl(240 10% 25%);
-  box-shadow: none;
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.mic-icon {
-  width: 28px;
-  height: 28px;
-  color: white;
-}
-
-.send-btn {
-  padding: 8px 20px;
-  border-radius: 100px;
-  border: 1px solid hsl(250 80% 65% / 0.4);
-  background: hsl(250 80% 55% / 0.15);
-  color: hsl(250 80% 80%);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.15s;
-}
-.send-btn:hover {
-  background: hsl(250 80% 55% / 0.25);
-  transform: scale(1.03);
 }
 
 /* ── Evaluation Screen ────────────────────────────────────────────────── */
