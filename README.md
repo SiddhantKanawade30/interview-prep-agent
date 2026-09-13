@@ -2,11 +2,8 @@
 
 AI Interviewer creates personalized technical interviews from a candidate's resume, GitHub profile, LinkedIn URL, and target role. It generates questions, speaks them aloud, transcribes answers, and produces an evaluation report.
 
-## Project Structure
+<img width="685" height="429" alt="image" src="https://github.com/user-attachments/assets/6ec4d2de-cb5c-4202-9a97-b804fcd750e1" />
 
-- `apps/frontend`: React onboarding form, interview room, speech capture, transcripts, and evaluation UI.
-- `apps/backend`: Express APIs, WebSocket interview flow, database access, LLM integration, GitHub enrichment, Deepgram, and ElevenLabs.
-- `packages` and `ui`: Shared configuration and reusable components.
 
 ## Flow
 
