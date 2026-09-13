@@ -45,11 +45,3 @@ WS   /ws/interview
 ```
 
 The standalone question and answer HTTP routes remain registered, but the active frontend interview uses the WebSocket flow.
-
-
-
-```powershell
-bun run build
-bun run lint
-bun run check-types
-```
