@@ -17,6 +17,9 @@ import {
   VolumeX,
 } from "lucide-react";
 import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { Progress } from "./ui/progress";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,6 +46,12 @@ interface EvaluationReport {
   detailedFeedback?: string;
   questionBreakdown?: QuestionFeedback[];
   summary: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "ai" | "user";
+  text: string;
 }
 
 type InterviewPhase =
@@ -76,8 +85,15 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
   // ── State ──
   const [phase, setPhase] = useState<InterviewPhase>("connecting");
   const [aiText, setAiText] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [userTranscript, setUserTranscript] = useState(""); // live interim
   const [finalTranscript, setFinalTranscript] = useState(""); // confirmed final
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, userTranscript, finalTranscript]);
   const [questionNumber, setQuestionNumber] = useState(1);
   const [isFinished, setIsFinished] = useState(false);
   const [evaluation, setEvaluation] = useState<EvaluationReport | null>(null);
@@ -280,6 +296,12 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
     }
 
     isSubmittingAnswerRef.current = true;
+    
+    setChatMessages((prev) => [
+      ...prev,
+      { id: Date.now().toString(), role: "user", text: answer },
+    ]);
+
     setUserTranscript("");
     setFinalTranscript("");
     finalTranscriptRef.current = "";
@@ -325,6 +347,12 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
         currentQuestionIdRef.current = message.question.id;
         setQuestionNumber(message.question.questionNumber ?? message.questionNumber ?? 1);
         setAiText(message.question.question);
+        
+        setChatMessages((prev) => [
+          ...prev,
+          { id: message.question!.id.toString() + "-" + Date.now(), role: "ai", text: message.question!.question },
+        ]);
+
         setPhase("ai-speaking");
 
         if (message.audioBase64 && !isMuted) {
@@ -397,87 +425,76 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
   }[phase];
 
   return (
-    <div className="voice-room">
-      {/* Ambient background orbs */}
-      <div className="orb orb-1" />
-      <div className="orb orb-2" />
-      <div className="orb orb-3" />
-
+    <div className="fixed inset-0 w-full h-screen flex flex-col bg-background font-sans overflow-hidden">
       {/* Top bar */}
-      <header className="voice-header">
-        <div className="voice-header-left">
-          <span className={`status-dot ${phase === "completed" ? "dot-blue" : "dot-green"}`} />
-          <span className="status-label">AI Technical Interviewer</span>
+      <header className="flex-none flex items-center justify-between p-4 bg-background/90 backdrop-blur-md border-b z-10 shadow-sm">
+        <div className="flex items-center gap-3">
+          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${phase === "completed" ? "bg-blue-500" : "bg-green-500 animate-pulse"}`} />
+          <span className="text-sm font-semibold text-foreground tracking-wide">AI Technical Interviewer</span>
         </div>
-        <div className="voice-header-center">
-          <span className="question-badge">
+        <div className="absolute left-1/2 -translate-x-1/2">
+          <Badge variant="secondary" className="px-4 py-1.5 text-xs font-bold tracking-wide">
             {isFinished ? "Completed" : `Question ${questionNumber} / 5`}
-          </span>
+          </Badge>
         </div>
-        <div className="voice-header-right">
-          <button
-            className="icon-btn"
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full bg-muted hover:bg-muted/80 text-muted-foreground"
             onClick={toggleMute}
             title={isMuted ? "Unmute AI" : "Mute AI"}
           >
-            {isMuted ? <VolumeX className="icon-sm" /> : <Volume2 className="icon-sm" />}
-          </button>
+            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </Button>
         </div>
       </header>
 
-      {/* Central avatar */}
-      <main className="voice-center">
-        {/* Ripple rings — only animate when AI is speaking */}
-        <div
-          className={`avatar-ring ring-3 ${phase === "ai-speaking" ? "ring-active" : ""}`}
-          style={{ transform: `scale(${phase === "ai-speaking" ? ringScale * 1.15 : 1})` }}
-        />
-        <div
-          className={`avatar-ring ring-2 ${phase === "ai-speaking" ? "ring-active" : ""}`}
-          style={{ transform: `scale(${phase === "ai-speaking" ? ringScale * 1.07 : 1})` }}
-        />
-        <div
-          className={`avatar-ring ring-1 ${phase === "ai-speaking" ? "ring-active" : ""}`}
-          style={{ transform: `scale(${phase === "ai-speaking" ? ringScale : 1})` }}
-        />
+      {/* Chat area */}
+      <main className="flex-1 overflow-y-auto p-4 sm:p-8 flex flex-col gap-6">
+        <div className="max-w-3xl w-full mx-auto flex flex-col gap-6 pb-32">
+          {chatMessages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`flex w-full ${msg.role === "ai" ? "justify-start" : "justify-end"}`}
+            >
+              <div
+                className={`max-w-[85%] px-5 py-3.5 rounded-2xl text-[15px] leading-relaxed shadow-sm ${
+                  msg.role === "ai"
+                    ? "bg-muted/80 text-foreground rounded-tl-sm border"
+                    : "bg-blue-500 text-white rounded-tr-sm"
+                }`}
+              >
+                {msg.text}
+              </div>
+            </div>
+          ))}
 
-        {/* Avatar core */}
-        <div className={`avatar-core ${phase === "ai-speaking" ? "core-speaking" : ""}`}>
-          <svg viewBox="0 0 64 64" fill="none" className="avatar-icon">
-            <circle cx="32" cy="20" r="12" fill="currentColor" opacity="0.9" />
-            <path
-              d="M8 56c0-13.255 10.745-24 24-24s24 10.745 24 24"
-              stroke="currentColor"
-              strokeWidth="5"
-              strokeLinecap="round"
-              opacity="0.9"
-            />
-          </svg>
+          {/* Live interim user transcript bubble */}
+          {(userTranscript || finalTranscript) && (
+            <div className="flex w-full justify-end">
+              <div className="max-w-[85%] px-5 py-3.5 rounded-2xl text-[15px] leading-relaxed shadow-sm bg-blue-500/80 text-white rounded-tr-sm">
+                {finalTranscript}
+                {userTranscript && (
+                  <span className="italic opacity-80"> {userTranscript}</span>
+                )}
+                <span className="ml-2 w-1.5 h-1.5 bg-white/70 rounded-full inline-block animate-pulse" />
+              </div>
+            </div>
+          )}
+          
+          <div ref={chatEndRef} />
         </div>
       </main>
 
-      {/* AI transcript */}
-      <div className={`subtitle-ai ${aiText ? "subtitle-visible" : ""}`}>
-        <div className="subtitle-badge">AI Interviewer</div>
-        <p className="subtitle-text">{aiText}</p>
-      </div>
-
-      {/* User transcript */}
-      <div
-        className={`subtitle-user ${userTranscript || finalTranscript ? "subtitle-visible" : ""}`}
-      >
-        <div className="subtitle-badge">You</div>
-        <p className="subtitle-text">
-          {finalTranscript}
-          {userTranscript && (
-            <span className="interim-text"> {userTranscript}</span>
-          )}
-        </p>
-      </div>
-
-      {/* Bottom controls */}
-      <footer className="voice-footer">
-        <p className="phase-label">{phaseLabel}</p>
+      {/* Bottom status bar */}
+      <footer className="absolute bottom-0 left-0 right-0 flex justify-center p-6 bg-gradient-to-t from-background via-background/90 to-transparent pointer-events-none">
+        <div className="bg-background/80 backdrop-blur-md border px-4 py-2 rounded-full shadow-sm flex items-center gap-3">
+          {phase === "ai-speaking" && <Volume2 className="w-4 h-4 text-primary animate-pulse" />}
+          {phase === "user-speaking" && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+          {phase === "user-listening" && <div className="w-2 h-2 rounded-full bg-green-500" />}
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{phaseLabel}</p>
+        </div>
       </footer>
     </div>
   );
@@ -487,141 +504,165 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
 
 function EvaluationScreen({ evaluation }: { evaluation: EvaluationReport }) {
   return (
-    <div className="eval-screen">
-      <div className="eval-container">
-        {/* Header */}
-        <div className="eval-header">
-          <div className="eval-trophy">
-            <Trophy className="trophy-icon" />
-          </div>
-          <div>
-            <h1 className="eval-title">Candidate Evaluation Report</h1>
-            <p className="eval-subtitle">Comprehensive performance &amp; mistake assessment</p>
-          </div>
-          <div className="eval-score-card">
-            <div>
-              <p className="score-label">Overall Score</p>
-              <p className="score-value">
-                {evaluation.score}
-                <span className="score-denom">/100</span>
-              </p>
+    <div className="min-h-screen bg-background p-6 pb-20 overflow-y-auto font-sans">
+      <div className="max-w-4xl mx-auto flex flex-col gap-6">
+        
+        {/* Header Card */}
+        <Card className="bg-gradient-to-br from-card to-muted border-primary/20 shadow-sm">
+          <CardContent className="flex flex-wrap items-center gap-6 p-6">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-gradient-to-br from-primary to-blue-500 shrink-0">
+              <Trophy className="w-7 h-7 text-white" />
             </div>
-            <div className="eval-divider" />
-            <div>
-              <p className="score-label">Rating</p>
-              <p className="rating-value">{evaluation.rating ?? "Developing"}</p>
+            <div className="flex-1">
+              <h1 className="text-2xl font-extrabold text-foreground m-0">Candidate Evaluation Report</h1>
+              <p className="text-sm text-muted-foreground mt-1">Comprehensive performance &amp; mistake assessment</p>
             </div>
-          </div>
-        </div>
+            <div className="flex items-center gap-4 p-4 rounded-xl bg-background border">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground m-0">Overall Score</p>
+                <p className="text-3xl font-black text-green-600 m-0">
+                  {evaluation.score}
+                  <span className="text-base font-bold text-muted-foreground">/100</span>
+                </p>
+              </div>
+              <div className="w-px h-10 bg-border" />
+              <div>
+                <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground m-0">Rating</p>
+                <p className="text-sm font-bold text-primary m-0">{evaluation.rating ?? "Developing"}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Category scores */}
-        <div className="category-grid">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: "Technical Accuracy", value: evaluation.categoryScores?.technicalAccuracy ?? evaluation.score, Icon: Target, color: "blue" },
-            { label: "Problem Solving", value: evaluation.categoryScores?.problemSolving ?? evaluation.score, Icon: BrainCircuit, color: "violet" },
-            { label: "Communication", value: evaluation.categoryScores?.communication ?? evaluation.score, Icon: MessagesSquare, color: "emerald" },
-            { label: "Depth", value: evaluation.categoryScores?.depth ?? evaluation.score, Icon: Layers3, color: "amber" },
+            { label: "Technical Accuracy", value: evaluation.categoryScores?.technicalAccuracy ?? evaluation.score, Icon: Target, color: "text-blue-500" },
+            { label: "Problem Solving", value: evaluation.categoryScores?.problemSolving ?? evaluation.score, Icon: BrainCircuit, color: "text-purple-500" },
+            { label: "Communication", value: evaluation.categoryScores?.communication ?? evaluation.score, Icon: MessagesSquare, color: "text-green-500" },
+            { label: "Depth", value: evaluation.categoryScores?.depth ?? evaluation.score, Icon: Layers3, color: "text-amber-500" },
           ].map(({ label, value, Icon, color }) => (
-            <div key={label} className="category-card">
-              <div className="category-header">
-                <span className={`category-name cat-${color}`}>
-                  <Icon className="cat-icon" /> {label}
-                </span>
-                <span className="category-value">{value}</span>
-              </div>
-              <div className="progress-track">
-                <div
-                  className={`progress-fill fill-${color}`}
-                  style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
-                />
-              </div>
-            </div>
+            <Card key={label} className="shadow-sm">
+              <CardContent className="p-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`flex items-center gap-1.5 text-xs font-bold ${color}`}>
+                    <Icon className="w-4 h-4" /> {label}
+                  </span>
+                  <span className="text-sm font-extrabold text-foreground">{value}</span>
+                </div>
+                <Progress value={Math.min(100, Math.max(0, value))} className="h-1.5" />
+              </CardContent>
+            </Card>
           ))}
         </div>
 
         {/* Stats row */}
-        <div className="stats-row">
-          <span><strong>{evaluation.answeredCount ?? 5}</strong> answers submitted</span>
-          <span><strong>{evaluation.totalQuestions ?? 5}</strong> questions assessed</span>
-          <span>Rating based on accuracy, reasoning, communication &amp; depth</span>
-        </div>
+        <Card className="shadow-sm bg-muted/30">
+          <CardContent className="flex flex-wrap gap-x-6 gap-y-3 p-4 text-sm text-muted-foreground">
+            <span><strong className="text-foreground">{evaluation.answeredCount ?? 5}</strong> answers submitted</span>
+            <span><strong className="text-foreground">{evaluation.totalQuestions ?? 5}</strong> questions assessed</span>
+            <span>Rating based on accuracy, reasoning, communication &amp; depth</span>
+          </CardContent>
+        </Card>
 
         {/* Strengths & Improvements */}
-        <div className="feedback-grid">
-          <div className="feedback-card feedback-green">
-            <div className="feedback-heading text-emerald">
-              <CheckCircle2 className="feedback-icon" /> Key Strengths
-            </div>
-            <ul className="feedback-list">
-              {(evaluation.strengths ?? []).map((s, i) => (
-                <li key={i} className="feedback-item">
-                  <span className="bullet bullet-green" /> {s}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="feedback-card feedback-amber">
-            <div className="feedback-heading text-amber">
-              <AlertTriangle className="feedback-icon" /> Areas to Improve
-            </div>
-            <ul className="feedback-list">
-              {(evaluation.improvements ?? []).map((s, i) => (
-                <li key={i} className="feedback-item">
-                  <span className="bullet bullet-amber" /> {s}
-                </li>
-              ))}
-            </ul>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Card className="border-green-500/20 bg-green-500/5 shadow-sm">
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-sm font-bold flex items-center gap-2 text-green-600">
+                <CheckCircle2 className="w-4 h-4" /> Key Strengths
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              <ul className="flex flex-col gap-2 m-0 p-0 list-none">
+                {(evaluation.strengths ?? []).map((s, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-foreground leading-relaxed">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5 shrink-0" /> {s}
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+          <Card className="border-amber-500/20 bg-amber-500/5 shadow-sm">
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-sm font-bold flex items-center gap-2 text-amber-600">
+                <AlertTriangle className="w-4 h-4" /> Areas to Improve
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              <ul className="flex flex-col gap-2 m-0 p-0 list-none">
+                {(evaluation.improvements ?? []).map((s, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-foreground leading-relaxed">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" /> {s}
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Detailed feedback */}
         {evaluation.detailedFeedback && (
-          <div className="feedback-card feedback-rose">
-            <div className="feedback-heading text-rose">
-              <AlertCircle className="feedback-icon" /> Mistakes &amp; Critique
-            </div>
-            <p className="feedback-body">{evaluation.detailedFeedback}</p>
-          </div>
+          <Card className="border-rose-500/20 bg-rose-500/5 shadow-sm">
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-sm font-bold flex items-center gap-2 text-rose-600">
+                <AlertCircle className="w-4 h-4" /> Mistakes &amp; Critique
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              <p className="text-sm text-foreground leading-relaxed m-0">{evaluation.detailedFeedback}</p>
+            </CardContent>
+          </Card>
         )}
 
         {/* Q&A breakdown */}
         {evaluation.questionBreakdown && evaluation.questionBreakdown.length > 0 && (
-          <div className="breakdown-section">
-            <div className="breakdown-title">
-              <MessageSquareCode className="breakdown-icon" /> Question-by-Question Analysis
+          <div className="flex flex-col gap-4 mt-2">
+            <div className="flex items-center gap-2 text-base font-extrabold text-foreground">
+              <MessageSquareCode className="w-5 h-5 text-primary" /> Question-by-Question Analysis
             </div>
-            <div className="breakdown-list">
+            <div className="flex flex-col gap-4">
               {evaluation.questionBreakdown.map((item, idx) => (
-                <div key={idx} className="breakdown-card">
-                  <span className="q-badge">Question #{item.questionNumber ?? idx + 1}</span>
-                  <p className="q-text">{item.question}</p>
-                  <div className="q-answer">
-                    <span className="q-answer-label">Your Response</span>
-                    "{item.userResponse || "No answer provided."}"
-                  </div>
-                  <div className="q-feedback">
-                    <div className="q-feedback-title">
-                      <AlertCircle className="q-feedback-icon" /> AI Feedback
+                <Card key={idx} className="shadow-sm">
+                  <CardContent className="flex flex-col gap-3 p-5">
+                    <div>
+                      <Badge variant="outline" className="text-primary bg-primary/5 border-primary/20 mb-2">
+                        Question #{item.questionNumber ?? idx + 1}
+                      </Badge>
+                      <p className="text-sm font-semibold text-foreground m-0">{item.question}</p>
                     </div>
-                    <p className="q-feedback-body">{item.feedback}</p>
-                  </div>
-                </div>
+                    <div className="p-3 rounded-lg bg-muted text-sm text-muted-foreground italic border">
+                      <span className="block text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1 not-italic">Your Response</span>
+                      "{item.userResponse || "No answer provided."}"
+                    </div>
+                    <div className="p-3 rounded-lg bg-rose-500/5 border border-rose-500/20">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-rose-600 mb-2">
+                        <AlertCircle className="w-3.5 h-3.5" /> AI Feedback
+                      </div>
+                      <p className="text-sm text-foreground leading-relaxed m-0">{item.feedback}</p>
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           </div>
         )}
 
         {/* Summary */}
-        <div className="summary-card">
-          <div className="summary-title">
-            <Sparkles className="summary-icon" /> Executive Summary
-          </div>
-          <p className="summary-body">{evaluation.summary}</p>
-        </div>
+        <Card className="shadow-sm">
+          <CardHeader className="p-5 pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
+              <Sparkles className="w-4 h-4 text-primary" /> Executive Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-5 pt-0">
+            <p className="text-sm text-muted-foreground leading-relaxed m-0">{evaluation.summary}</p>
+          </CardContent>
+        </Card>
 
-        <div className="eval-actions">
-          <Button onClick={() => window.location.reload()} className="restart-btn">
-            <RefreshCw className="btn-icon" /> Start New Interview
+        <div className="flex justify-end mt-4">
+          <Button onClick={() => window.location.reload()} size="lg" className="flex items-center gap-2 font-semibold">
+            <RefreshCw className="w-4 h-4" /> Start New Interview
           </Button>
         </div>
       </div>
