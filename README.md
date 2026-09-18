@@ -2,11 +2,8 @@
 
 AI Interviewer creates personalized technical interviews from a candidate's resume, GitHub profile, LinkedIn URL, and target role. It generates questions, speaks them aloud, transcribes answers, and produces an evaluation report.
 
-## Project Structure
+<img width="685" height="429" alt="image" src="https://github.com/user-attachments/assets/6ec4d2de-cb5c-4202-9a97-b804fcd750e1" />
 
-- `apps/frontend`: React onboarding form, interview room, speech capture, transcripts, and evaluation UI.
-- `apps/backend`: Express APIs, WebSocket interview flow, database access, LLM integration, GitHub enrichment, Deepgram, and ElevenLabs.
-- `packages` and `ui`: Shared configuration and reusable components.
 
 ## Flow
 
@@ -48,40 +45,3 @@ WS   /ws/interview
 ```
 
 The standalone question and answer HTTP routes remain registered, but the active frontend interview uses the WebSocket flow.
-
-## Environment
-
-Create `apps/backend/.env`:
-
-```env
-DATABASE_URL=postgresql://...
-OPENROUTER_API_KEY=...
-DEEPGRAM_API_KEY=...
-ELEVENLABS_API_KEY=...
-```
-
-The frontend currently uses `http://localhost:8000` as the backend URL. For production, use a Deepgram key that can create temporary browser tokens instead of exposing a project key to the browser.
-
-## Run Locally
-
-```powershell
-bun install
-
-cd apps/backend
-bun run dev
-```
-
-In a second terminal:
-
-```powershell
-cd apps/frontend
-bun run dev
-```
-
-From the repository root:
-
-```powershell
-bun run build
-bun run lint
-bun run check-types
-```
