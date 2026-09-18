@@ -8,8 +8,10 @@ import {
 } from "../db/schema";
 import {
     evaluateInterviewSession,
+    evaluateSingleQuestion,
     generateInterviewQuestion,
     type EvaluationResult,
+    type SingleQuestionEvaluation,
 } from "./interview.service";
 
 export type NextQuestionResult =
@@ -41,26 +43,54 @@ export async function getNextInterviewQuestion(sessionId: number): Promise<NextQ
             question: interviewQuestions.question,
             questionNumber: interviewQuestions.questionNumber,
             userResponse: interviewQuestions.userResponse,
+            feedback: interviewQuestions.feedback,
         })
         .from(interviewQuestions)
         .where(eq(interviewQuestions.sessionId, sessionId));
 
-    if (session.status === "completed" || previousQuestions.length >= 5) {
-        const evaluation = session.score !== null && session.feedback
-            ? session.feedback as EvaluationResult
-            : await evaluateInterviewSession(candidate, session, previousQuestions);
-
-        if (session.status !== "completed" || session.score === null || !session.feedback) {
-            await db
-                .update(interviewSessions)
-                .set({
-                    status: "completed",
-                    completedAt: session.completedAt ?? new Date(),
-                    score: evaluation.score,
-                    feedback: evaluation,
-                })
-                .where(eq(interviewSessions.id, sessionId));
+    if (session.status === "completed" || previousQuestions.length >= 2) {
+        // Use cached evaluation if already stored
+        if (session.score !== null && session.feedback) {
+            return { isCompleted: true, evaluation: session.feedback as EvaluationResult };
         }
+
+        // Wait for any in-flight per-question evaluations that haven't landed yet.
+        // We poll at most ~6 seconds to avoid blocking forever.
+        const unevaluated = previousQuestions.filter(q => q.userResponse?.trim() && !q.feedback);
+        if (unevaluated.length > 0) {
+            console.log(`Waiting for ${unevaluated.length} in-flight question evaluation(s)…`);
+            await new Promise(r => setTimeout(r, 3000));
+        }
+
+        // Reload with potentially-updated feedback
+        const questionsWithFeedback = await db
+            .select({
+                question: interviewQuestions.question,
+                questionNumber: interviewQuestions.questionNumber,
+                userResponse: interviewQuestions.userResponse,
+                feedback: interviewQuestions.feedback,
+            })
+            .from(interviewQuestions)
+            .where(eq(interviewQuestions.sessionId, sessionId));
+
+        const evaluation = await evaluateInterviewSession(
+            candidate,
+            session,
+            questionsWithFeedback.map(q => ({
+                ...q,
+                feedback: q.feedback as SingleQuestionEvaluation | null,
+            }))
+        );
+
+        await db
+            .update(interviewSessions)
+            .set({
+                status: "completed",
+                completedAt: session.completedAt ?? new Date(),
+                score: evaluation.score,
+                feedback: evaluation,
+            })
+            .where(eq(interviewSessions.id, sessionId));
 
         return { isCompleted: true, evaluation };
     }
@@ -91,7 +121,7 @@ Candidate Context:
 - GitHub Details: ${JSON.stringify({ bio: profile.bio, repositories: profile.repositories })}
 
 Full Session History so far:
-${JSON.stringify(previousQuestions, null, 2)}
+${JSON.stringify(previousQuestions.map(q => ({ question: q.question, questionNumber: q.questionNumber, userResponse: q.userResponse })), null, 2)}
 
 ${isFirstQuestion
     ? `INITIAL INTERVIEW OPENING INSTRUCTIONS:
@@ -133,5 +163,42 @@ export async function submitInterviewAnswer(questionId: number, answer: string) 
         .where(eq(interviewQuestions.id, questionId))
         .returning();
     if (!updatedQuestion) throw new Error("Question not found");
+
+    // ── Fire-and-forget per-question evaluation ───────────────────────────────
+    // We do NOT await this — it runs in the background while the user continues
+    // with the next question, keeping UX fast and responsive.
+    (async () => {
+        try {
+            // Fetch candidate & session context needed for evaluation
+            const session = await db.query.interviewSessions.findFirst({
+                where: eq(interviewSessions.id, updatedQuestion.sessionId),
+            });
+            const candidate = session
+                ? await db.query.candidates.findFirst({ where: eq(candidates.id, session.candidateId) })
+                : null;
+
+            if (!candidate || !session) return;
+
+            console.log(`[bg-eval] Evaluating question #${updatedQuestion.questionNumber} (id=${questionId})…`);
+
+            const singleEval = await evaluateSingleQuestion(
+                candidate.name,
+                session.role,
+                updatedQuestion.question,
+                answer,
+                updatedQuestion.questionNumber
+            );
+
+            await db
+                .update(interviewQuestions)
+                .set({ feedback: singleEval })
+                .where(eq(interviewQuestions.id, questionId));
+
+            console.log(`[bg-eval] ✓ Question #${updatedQuestion.questionNumber} evaluated (score=${singleEval.score})`);
+        } catch (err) {
+            console.error(`[bg-eval] Failed to evaluate question id=${questionId}:`, err);
+        }
+    })();
+
     return updatedQuestion;
 }
