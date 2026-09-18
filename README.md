@@ -2,11 +2,8 @@
 
 AI Interviewer creates personalized technical interviews from a candidate's resume, GitHub profile, LinkedIn URL, and target role. It generates questions, speaks them aloud, transcribes answers, and produces an evaluation report.
 
-high level flow - 
-<img width="685" height="429" alt="image" src="https://github.com/user-attachments/assets/6ec4d2de-cb5c-4202-9a97-b804fcd750e1" />
+## Detailed flow & information - 
 
-
-detailed flow - 
 <img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/d0d1e86e-cef1-4cc8-bcce-613dcb97b29d" />
 
 
