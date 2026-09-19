@@ -1,3 +1,8 @@
+type GithubFetchResponse = {
+    ok: boolean;
+    json: () => Promise<unknown>;
+};
+
 export async function getGithubProfile(githubUrl: string) {
     const username = githubUrl.split("/").filter(Boolean).pop();
 
@@ -10,7 +15,7 @@ export async function getGithubProfile(githubUrl: string) {
         fetch(
             `https://api.github.com/users/${username}/repos?sort=updated&per_page=100`
         )
-    ]);
+    ]) as [GithubFetchResponse, GithubFetchResponse];
 
     if (!profileResponse.ok || !reposResponse.ok) {
         throw new Error("Failed to fetch GitHub data");
