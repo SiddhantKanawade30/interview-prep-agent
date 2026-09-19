@@ -5,6 +5,14 @@ import { candidates } from "../../db/schema";
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
+type OpenRouterResponse = {
+    error?: unknown;
+    choices?: Array<{
+        message?: {
+            content?: string | null;
+        };
+    }>;
+};
 
 export const extractDetails = async (req: Request, res: Response) => {
     try {
@@ -43,6 +51,12 @@ export const extractDetails = async (req: Request, res: Response) => {
             projects: structuredData.projects || [],
             resumeText: text
         }).returning({ id: candidates.id });
+
+        if (!newCandidate) {
+            return res.status(500).json({
+                message: "Failed to save extracted candidate",
+            });
+        }
 
         return res.status(200).json({
             message: "Details extracted and saved successfully",
@@ -108,23 +122,29 @@ Do not include any markdown formatting, backticks, or extra text.`
             })
         });
 
-        const data = await response.json();
+        const data = await response.json() as OpenRouterResponse;
 
         if (data.error) {
             console.error("OpenRouter API Error:", data.error);
             return null;
         }
 
-        let content = data.choices[0].message.content;
-
-        // Sometimes LLMs still wrap with markdown blocks even with json_object enabled
-        if (content.startsWith("\`\`\`json")) {
-            content = content.replace(/^\`\`\`json\n/, "").replace(/\n\`\`\`$/, "");
-        } else if (content.startsWith("\`\`\`")) {
-            content = content.replace(/^\`\`\`\n/, "").replace(/\n\`\`\`$/, "");
+        const content = data.choices?.[0]?.message?.content;
+        if (!content) {
+            console.error("OpenRouter API returned no resume content");
+            return null;
         }
 
-        return JSON.parse(content);
+        let parsedContent = content;
+
+        // Sometimes LLMs still wrap with markdown blocks even with json_object enabled
+        if (parsedContent.startsWith("\`\`\`json")) {
+            parsedContent = parsedContent.replace(/^\`\`\`json\n/, "").replace(/\n\`\`\`$/, "");
+        } else if (parsedContent.startsWith("\`\`\`")) {
+            parsedContent = parsedContent.replace(/^\`\`\`\n/, "").replace(/\n\`\`\`$/, "");
+        }
+
+        return JSON.parse(parsedContent);
     } catch (error) {
         console.error("Error extracting structured data:", error);
         return null;
