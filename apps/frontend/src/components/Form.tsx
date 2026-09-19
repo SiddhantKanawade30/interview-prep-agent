@@ -5,6 +5,34 @@ import { Label } from "./ui/label"
 import { toast } from "sonner"
 import axios from "axios"
 import { BACKEND_URL } from "../lib/config"
+import LatticeLoader from "./ui/LatticeLoader"
+
+function getUrlError(value: string, name: string) {
+    try {
+        const url = new URL(value)
+        if (!['http:', 'https:'].includes(url.protocol)) {
+            return `${name} must use a valid http:// or https:// URL`
+        }
+        if (!url.hostname.includes('.')) {
+            return `${name} must include a valid domain`
+        }
+        return null
+    } catch {
+        return `${name} must be a complete URL, for example https://github.com/username`
+    }
+}
+
+function getSubmissionError(error: unknown) {
+    if (axios.isAxiosError(error)) {
+        const status = error.response?.status
+        const responseMessage = error.response?.data?.message
+        const issues = error.response?.data?.errors
+        const issueMessage = Array.isArray(issues) ? issues.map((issue: { message?: string }) => issue.message).filter(Boolean).join(', ') : ''
+        return `${status ? `${status}: ` : ''}${issueMessage || responseMessage || error.message}`
+    }
+
+    return error instanceof Error ? error.message : 'An unexpected error occurred during submission'
+}
 
 export default function Form({ onStart }: { onStart?: (sessionId: number) => void }) {
     const [github, setGithub] = useState("")
@@ -18,6 +46,18 @@ export default function Form({ onStart }: { onStart?: (sessionId: number) => voi
         if (!github || !linkedIn || !resume || !role) {
             toast.warning("Please provide your LinkedIn, GitHub, Resume, and Role", { position: "top-center" })
             return;
+        }
+
+        const githubError = getUrlError(github, "GitHub URL")
+        if (githubError) {
+            toast.error(githubError, { position: "top-center" })
+            return
+        }
+
+        const linkedInError = getUrlError(linkedIn, "LinkedIn URL")
+        if (linkedInError) {
+            toast.error(linkedInError, { position: "top-center" })
+            return
         }
         
         setIsLoading(true)
@@ -55,8 +95,8 @@ export default function Form({ onStart }: { onStart?: (sessionId: number) => voi
             }
 
         } catch (err) {
-            console.log(err)
-            toast.error("An error occurred during submission", { position: "top-center" })
+            console.error(err)
+            toast.error(getSubmissionError(err), { position: "top-center" })
         } finally {
             setIsLoading(false)
         }
@@ -93,7 +133,7 @@ export default function Form({ onStart }: { onStart?: (sessionId: number) => voi
                 </div>
 
                 <Button className="w-full mt-4" onClick={Submit} disabled={isLoading}>
-                    {isLoading ? "Processing..." : "Start Interview"}
+                    {isLoading ? <LatticeLoader label="Preparing interview" showTimer={false} color="currentColor" /> : "Start Interview"}
                 </Button>
             </div>
         </div>

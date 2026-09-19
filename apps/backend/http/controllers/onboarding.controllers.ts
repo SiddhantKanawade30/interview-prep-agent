@@ -9,22 +9,22 @@ export async function onBoardingController(
     req: Request,
     res: Response
 ) {
-    const { github, linkedIn, candidateId } = req.body;
-
-    const result = preInterviewSchema.safeParse({
-        github,
-        linkedIn,
-        candidateId,
-    });
-
-    if (!result.success) {
-        return res.status(400).json({
-            message: "Incorrect Body",
-            errors: result.error,
-        });
-    }
-
     try {
+        const { github, linkedIn, candidateId } = req.body;
+
+        const result = preInterviewSchema.safeParse({
+            github,
+            linkedIn,
+            candidateId,
+        });
+
+        if (!result.success) {
+            return res.status(400).json({
+                message: "Invalid social profile details",
+                errors: result.error.issues,
+            });
+        }
+
         const profileData = await getGithubProfile(result.data.github);
         const existingSocial = await db.query.socials.findFirst({
             where: or(
@@ -116,7 +116,7 @@ export async function onBoardingController(
         console.error(error);
 
         return res.status(500).json({
-            message: "Failed to create candidate and scrape GitHub",
+            message: "Failed to save social profiles. Please check the URLs and try again.",
         });
     }
 }

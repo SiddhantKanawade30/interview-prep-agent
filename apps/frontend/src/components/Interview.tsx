@@ -20,6 +20,7 @@ import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Progress } from "./ui/progress";
+import LatticeLoader from "./ui/LatticeLoader";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -115,6 +116,8 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
   const userTranscriptRef = useRef("");
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSubmittingAnswerRef = useRef(false);
+  const interviewConnectionErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const interviewConnectedRef = useRef(false);
 
   // ── Audio context (lazy) ──
   function getAudioContext(): AudioContext {
@@ -329,6 +332,11 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
     socketRef.current = socket;
 
     socket.onopen = () => {
+      interviewConnectedRef.current = true;
+      if (interviewConnectionErrorTimerRef.current) {
+        clearTimeout(interviewConnectionErrorTimerRef.current);
+        interviewConnectionErrorTimerRef.current = null;
+      }
       socket.send(JSON.stringify({ type: "start", sessionId }));
     };
 
@@ -376,9 +384,18 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
       }
     };
 
-    socket.onerror = () => toast.error("Interview connection failed");
+    socket.onerror = () => {
+      if (interviewConnectedRef.current || interviewConnectionErrorTimerRef.current) return;
+
+      interviewConnectionErrorTimerRef.current = setTimeout(() => {
+        interviewConnectionErrorTimerRef.current = null;
+        if (!interviewConnectedRef.current && !intentionalCloseRef.current) {
+          toast.error("Interview connection failed");
+        }
+      }, 3000);
+    };
     socket.onclose = () => {
-      if (!intentionalCloseRef.current) {
+      if (!intentionalCloseRef.current && interviewConnectedRef.current) {
         toast.error("Interview connection closed unexpectedly");
       }
     };
@@ -386,6 +403,10 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
     return () => {
       intentionalCloseRef.current = true;
       socket.close();
+      if (interviewConnectionErrorTimerRef.current) {
+        clearTimeout(interviewConnectionErrorTimerRef.current);
+        interviewConnectionErrorTimerRef.current = null;
+      }
       stopDeepgram();
       sourceNodeRef.current?.stop();
       stopAmplitudeLoop();
@@ -491,6 +512,7 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
       <footer className="absolute bottom-0 left-0 right-0 flex justify-center p-6 bg-gradient-to-t from-background via-background/90 to-transparent pointer-events-none">
         <div className="bg-background/80 backdrop-blur-md border px-4 py-2 rounded-full shadow-sm flex items-center gap-3">
           {phase === "ai-speaking" && <Volume2 className="w-4 h-4 text-primary animate-pulse" />}
+          {(phase === "connecting" || phase === "processing") && <LatticeLoader label={phase === "connecting" ? "Connecting" : "Processing"} showTimer={false} fontSize={12} color="hsl(var(--muted-foreground))" />}
           {phase === "user-speaking" && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
           {phase === "user-listening" && <div className="w-2 h-2 rounded-full bg-green-500" />}
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{phaseLabel}</p>
