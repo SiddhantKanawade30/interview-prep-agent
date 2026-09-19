@@ -22,6 +22,7 @@
     "@types/multer": "^2.2.0",
     "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.1",
+    "@types/node": "^22.0.0",
     "@deepgram/sdk": "^5.9.0",
     "@elevenlabs/elevenlabs-js": "^2.68.0",
     "@openrouter/sdk": "^1.2.48",
