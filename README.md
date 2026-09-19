@@ -46,4 +46,3 @@ GET  /api/v1/interview/stt-token
 WS   /ws/interview
 ```
 
-The standalone question and answer HTTP routes remain registered, but the active frontend interview uses the WebSocket flow.
