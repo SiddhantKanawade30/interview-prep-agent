@@ -10,7 +10,6 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/cors": "^2.8.19",
     "@types/multer": "^2.2.0",
     "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.1",
@@ -22,6 +21,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@types/cors": "^2.8.19",
     "@deepgram/sdk": "^5.9.0",
     "@elevenlabs/elevenlabs-js": "^2.68.0",
     "@openrouter/sdk": "^1.2.48",
