@@ -10,10 +10,6 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/multer": "^2.2.0",
-    "@types/pg": "^8.23.1",
-    "@types/ws": "^8.18.1",
-    "@types/express": "^5.0.6",
     "drizzle-kit": "0.31.10",
     "tsx": "^4.23.12"
   },
@@ -22,6 +18,10 @@
   },
   "dependencies": {
     "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.2.0",
+    "@types/pg": "^8.23.1",
+    "@types/ws": "^8.18.1",
     "@deepgram/sdk": "^5.9.0",
     "@elevenlabs/elevenlabs-js": "^2.68.0",
     "@openrouter/sdk": "^1.2.48",
