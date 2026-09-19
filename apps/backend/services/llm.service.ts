@@ -2,6 +2,13 @@
  * Generic LLM Service for OpenRouter API integrations
  */
 
+type LLMFetchResponse = {
+    ok: boolean;
+    status: number;
+    text: () => Promise<string>;
+    json: () => Promise<unknown>;
+};
+
 export async function generateLLMCompletion(
     prompt: string,
     systemPrompt?: string,
@@ -29,7 +36,7 @@ export async function generateLLMCompletion(
             model,
             messages,
         }),
-    });
+    }) as unknown as LLMFetchResponse;
 
     if (!response.ok) {
         const errorBody = await response.text();
