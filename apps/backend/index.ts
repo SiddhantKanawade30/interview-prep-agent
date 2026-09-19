@@ -10,7 +10,14 @@ import { handleInterviewSocket } from "./ws/interview";
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://interview-agent-01.vercel.app",
+    process.env.CORS_ORIGIN,
+].filter((origin): origin is string => Boolean(origin));
+
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 app.use("/api/v1/onboarding", onboardingRouter);
