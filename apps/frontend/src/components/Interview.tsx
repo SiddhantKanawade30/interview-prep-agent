@@ -31,7 +31,7 @@ interface QuestionFeedback {
   feedback: string;
 }
 
-interface EvaluationReport {
+export interface EvaluationReport {
   score: number;
   rating?: "Excellent" | "Strong" | "Developing" | "Needs Improvement";
   categoryScores?: {
@@ -82,7 +82,7 @@ async function base64ToAudioBuffer(
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function InterviewPage({ sessionId }: { sessionId: number }) {
+export default function InterviewPage({ sessionId, onComplete }: { sessionId: number; onComplete?: () => void }) {
   // ── State ──
   const [phase, setPhase] = useState<InterviewPhase>("connecting");
   const [aiText, setAiText] = useState("");
@@ -377,6 +377,7 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
         setIsFinished(true);
         setEvaluation(message.evaluation ?? null);
         setPhase("completed");
+        onComplete?.();
         intentionalCloseRef.current = true;
         socket.close();
       } else if (message.type === "error") {
@@ -412,7 +413,7 @@ export default function InterviewPage({ sessionId }: { sessionId: number }) {
       stopAmplitudeLoop();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionId, onComplete]);
 
   // ─── Mute toggle stops current playback ──
   const toggleMute = () => {
