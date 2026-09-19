@@ -1,4 +1,4 @@
-import type { Request, Response } from "express";
+import type { Request, Response as ExpressResponse } from "express";
 import { PDFParse } from "pdf-parse";
 import { db } from "../../db/index";
 import { candidates } from "../../db/schema";
@@ -14,7 +14,7 @@ type OpenRouterResponse = {
     }>;
 };
 
-export const extractDetails = async (req: Request, res: Response) => {
+export const extractDetails = async (req: Request, res: ExpressResponse) => {
     try {
         const file = req.file
 
@@ -122,7 +122,8 @@ Do not include any markdown formatting, backticks, or extra text.`
             })
         });
 
-        const data = await response.json() as OpenRouterResponse;
+        const responseBody = response as unknown as { json: () => Promise<OpenRouterResponse> };
+        const data = await responseBody.json();
 
         if (data.error) {
             console.error("OpenRouter API Error:", data.error);
