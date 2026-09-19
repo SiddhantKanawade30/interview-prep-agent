@@ -14,7 +14,6 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
 
-    "types": ["bun-types", "cors"],
     
     // Best practices
     "strict": true,
