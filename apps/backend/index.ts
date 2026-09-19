@@ -14,6 +14,7 @@ const allowedOrigins = [
     "http://localhost:3000",
     "http://localhost:5173",
     "https://interview-agent-01.vercel.app",
+    "https://interview-prep-agent-ysa4.onrender.com/",
     process.env.CORS_ORIGIN,
 ].filter((origin): origin is string => Boolean(origin));
 
