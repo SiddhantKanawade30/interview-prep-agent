@@ -4,8 +4,8 @@ AI Interviewer creates personalized technical interviews from a candidate's resu
 
 ## Detailed flow & information - 
 
-<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/d0d1e86e-cef1-4cc8-bcce-613dcb97b29d" />
-
+<img width="1536" height="811" alt="image" src="https://github.com/user-attachments/assets/8bee087d-de3c-44e9-8b05-61923b2bf3dc" />
+<img width="1536" height="731" alt="image" src="https://github.com/user-attachments/assets/9ba369af-73fa-4245-a2f2-bc7088abe2a7" />
 
 ## Flow
 
