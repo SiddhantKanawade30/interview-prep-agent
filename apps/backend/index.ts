@@ -24,6 +24,10 @@ app.use(express.json());
 app.use("/api/v1/onboarding", onboardingRouter);
 app.use("/api/v1/interview", sttTokenRouter);
 
+app.get("/health", (_req, res) =>{
+    res.send("health ok");
+});
+
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (res.headersSent) {
         return
