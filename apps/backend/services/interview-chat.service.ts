@@ -48,7 +48,7 @@ export async function getNextInterviewQuestion(sessionId: number): Promise<NextQ
         .from(interviewQuestions)
         .where(eq(interviewQuestions.sessionId, sessionId));
 
-    if (session.status === "completed" || previousQuestions.length >= 2) {
+    if (session.status === "completed" || previousQuestions.length >= 5) {
         // Use cached evaluation if already stored
         if (session.score !== null && session.feedback) {
             return { isCompleted: true, evaluation: session.feedback as EvaluationResult };
