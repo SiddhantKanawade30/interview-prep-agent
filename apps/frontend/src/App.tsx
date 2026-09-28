@@ -16,7 +16,7 @@ function pageFromPath(pathname: string): Page {
 }
 
 function sessionFromPath(pathname: string): number | null {
-  const match = pathname.match(/^\/interview\/(\d+)/);
+  const match = pathname.match(/^\/(?:interview|result)\/(\d+)/);
   return match ? Number(match[1]) : null;
 }
 
@@ -25,28 +25,54 @@ function navigate(path: string) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+function hasStoredEvaluation(sessionId: number | null): boolean {
+  if (!sessionId) return false;
+  try {
+    return Boolean(sessionStorage.getItem(`interview-evaluation-${sessionId}`));
+  } catch {
+    return false;
+  }
+}
+
 export function App() {
   const [page, setPage] = useState<Page>(() => pageFromPath(window.location.pathname));
   const [sessionId, setSessionId] = useState<number | null>(() => sessionFromPath(window.location.pathname));
 
   useEffect(() => {
-    const handlePopState = () => setPage(pageFromPath(window.location.pathname));
+    const handlePopState = () => {
+      const nextPath = window.location.pathname;
+      setPage(pageFromPath(nextPath));
+      setSessionId(sessionFromPath(nextPath));
+    };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  const handleStart = (id: number) => {
-    setSessionId(id);
-    navigate(`/interview/${id}`);
-    setPage("interview");
+  const handleStart = (id?: number) => {
+    if (typeof id === "number") {
+      setSessionId(id);
+      navigate(`/interview/${id}`);
+      setPage("interview");
+      return;
+    }
+
+    navigate("/onboarding");
+    setPage("form");
   };
+
+  const shouldShowStoredResult = page === "interview" && hasStoredEvaluation(sessionId);
 
   return (
     <>
       {page == "landing" && <LandingPage onStart={() => navigate("/onboarding")} />}
       {page == "form" && <Form onStart={handleStart} />}
-      {page == "interview" && sessionId && <InterviewPage sessionId={sessionId} onComplete={() => window.history.pushState({}, "", `/result/${sessionId}`)} />}
-      {page == "result" && <Result />}
+      {(page == "interview" && sessionId && !shouldShowStoredResult) && (
+        <InterviewPage sessionId={sessionId} onComplete={() => navigate(`/result/${sessionId}`)} />
+      )}
+      {(page == "interview" && sessionId && shouldShowStoredResult) && (
+        <Result sessionId={sessionId} onStartNew={() => navigate("/onboarding")} />
+      )}
+      {page == "result" && sessionId && <Result sessionId={sessionId} onStartNew={() => navigate("/onboarding")} />}
       <Toaster />
     </>
   );

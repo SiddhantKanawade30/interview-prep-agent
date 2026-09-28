@@ -374,8 +374,12 @@ export default function InterviewPage({ sessionId, onComplete }: { sessionId: nu
           });
         }
       } else if (message.type === "completed") {
+        const finalEvaluation = message.evaluation ?? null;
+        if (sessionId) {
+          sessionStorage.setItem(`interview-evaluation-${sessionId}`, JSON.stringify(finalEvaluation));
+        }
         setIsFinished(true);
-        setEvaluation(message.evaluation ?? null);
+        setEvaluation(finalEvaluation);
         setPhase("completed");
         onComplete?.();
         intentionalCloseRef.current = true;
@@ -525,7 +529,7 @@ export default function InterviewPage({ sessionId, onComplete }: { sessionId: nu
 
 // ─── Evaluation Screen ─────────────────────────────────────────────────────────
 
-function EvaluationScreen({ evaluation }: { evaluation: EvaluationReport }) {
+export function EvaluationScreen({ evaluation }: { evaluation: EvaluationReport }) {
   return (
     <div className="min-h-screen bg-background p-6 pb-20 overflow-y-auto font-sans">
       <div className="max-w-4xl mx-auto flex flex-col gap-6">
